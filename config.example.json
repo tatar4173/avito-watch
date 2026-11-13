@@ -1,0 +1,14 @@
+{
+  "interval": 45,
+  "start_delay": 0,
+  "limit": 7,
+  "watches": [
+    {
+      "id": "w1",
+      "name": "rtx 3060 12gb",
+      "url": "https://www.avito.ru/all/tovary_dlya_kompyutera/komplektuyuschie/videokarty-ASgBAgICAkTGB~pm7gmmZw?q=rtx+3060+12gb&s=104",
+      "enabled": true,
+      "limit": 7
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+name: build-installer
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка Inno Setup
+        run: choco install innosetup --no-progress -y
+        shell: pwsh
+
+      - name: Проверка версии
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $installer = (Select-String -Path installer.iss -Pattern 'AppVersion "([\d.]+)"').Matches[0].Groups[1].Value
+          $app = (Select-String -Path app.pyw -Pattern 'APP_VERSION = "([\d.]+)"').Matches[0].Groups[1].Value
+          $engine = (Select-String -Path avito_watch.py -Pattern 'APP_VERSION = "([\d.]+)"').Matches[0].Groups[1].Value
+          Write-Host "VERSION=$version installer=$installer app=$app engine=$engine"
+          if ($version -ne $installer -or $version -ne $app -or $version -ne $engine) {
+            throw "Версии не совпадают"
+          }
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $tag = $env:GITHUB_REF_NAME
+            Write-Host "тег: $tag"
+            if ($tag -ne "v$version") { throw "Тег $tag не совпадает с версией $version" }
+          }
+        shell: pwsh
+
+      - name: Сборка установщика
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        shell: pwsh
+
+      - name: Контрольные суммы
+        run: |
+          Get-ChildItem dist\*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$hash  $($_.Name)" | Out-File -FilePath dist\SHA256.txt -Append -Encoding utf8
+          }
+        shell: pwsh
+
+      - name: Артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: AvitoWatch-setup
+          path: |
+            dist/*.exe
+            dist/SHA256.txt
+
+      - name: Публикация релиза
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/SHA256.txt

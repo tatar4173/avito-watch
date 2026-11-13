@@ -1,0 +1,40 @@
+name: Баг
+description: Что-то не работает
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло
+      description: Что ожидалось и что случилось
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      description: Из установщика или из файла version
+      placeholder: 1.0.0
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows
+      placeholder: Windows 11 23H2
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Хвост журнала
+      description: Последние 20 строк из общего-лог.txt
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Python 3.10+ установлен
+        - label: Google Chrome установлен
+        - label: Капча решена в окне Chrome
