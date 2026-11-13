@@ -307,6 +307,109 @@ def pythonw_exe():
     return str(exe)
 
 
+def chrome_exe_path():
+    roots = [
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+        os.environ.get("LOCALAPPDATA", ""),
+    ]
+    for root in roots:
+        if not root:
+            continue
+        candidate = Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe"
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def monitor_chrome_pids():
+    pids = set()
+    profile = str(PROFILE_DIR).lower()
+    try:
+        import psutil
+
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                if (proc.info.get("name") or "").lower() != "chrome.exe":
+                    continue
+                line = " ".join(proc.info.get("cmdline") or []).lower()
+                if profile in line:
+                    pids.add(int(proc.info["pid"]))
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return pids
+
+
+def show_monitor_browser():
+    """Показывает окно Chrome мониторинга как обычное окно с кнопкой в панели задач."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        pids = monitor_chrome_pids()
+        found = []
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def callback(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            pid = wintypes.DWORD()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value in pids:
+                buf = ctypes.create_unicode_buffer(256)
+                user32.GetClassNameW(hwnd, buf, 256)
+                if buf.value.startswith("Chrome_WidgetWin"):
+                    found.append(hwnd)
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(callback), 0)
+
+        if found:
+            def area(hwnd):
+                rect = wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                return (rect.right - rect.left) * (rect.bottom - rect.top)
+
+            hwnd = max(found, key=area)
+            GWL_EXSTYLE = -20
+            WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_APPWINDOW = 0x00040000
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+            screen_w = user32.GetSystemMetrics(0)
+            screen_h = user32.GetSystemMetrics(1)
+            width = min(1400, int(screen_w * 0.72))
+            height = min(900, int(screen_h * 0.78))
+            x = max(0, (screen_w - width) // 2)
+            y = max(0, (screen_h - height) // 2 - 30)
+
+            user32.ShowWindow(hwnd, 9)
+            user32.SetWindowPos(hwnd, 0, x, y, width, height, 0x0040)
+            user32.SetForegroundWindow(hwnd)
+            return True
+    except Exception:
+        pass
+
+    exe = chrome_exe_path()
+    if exe:
+        try:
+            subprocess.Popen(
+                [exe, f"--user-data-dir={PROFILE_DIR}", "--new-window",
+                 "https://www.avito.ru/"],
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            return True
+        except Exception:
+            return False
+    return False
+
+
 def dark_titlebar(window):
     try:
         import ctypes
@@ -899,6 +1002,9 @@ class App(tk.Tk):
         Btn(row, "изменения", self.open_changes, width=150, height=36,
             bg=CARD, variant="ghost", font=F_SMALL).pack(side="right")
 
+        Btn(body, "показать Chrome", self.show_browser, width=320, height=36,
+            bg=CARD, variant="ghost", font=F_SMALL).pack(fill="x", pady=(10, 0))
+
         tk.Frame(body, bg=LINE_SOFT, height=1).pack(side="bottom", fill="x",
                                                     pady=(0, 12))
         self._signature(body, CARD, side="bottom")
@@ -1113,6 +1219,14 @@ class App(tk.Tk):
     def open_shots(self):
         SHOTS_DIR.mkdir(exist_ok=True)
         os.startfile(str(SHOTS_DIR))
+
+    def show_browser(self):
+        if show_monitor_browser():
+            return
+        messagebox.showinfo(
+            "Avito Watch",
+            "Не нашёл Chrome. Установи Google Chrome или запусти мониторинг.",
+        )
 
     def _paint_dot(self):
         color = OK if self._status else MUTED
