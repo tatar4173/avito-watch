@@ -23,7 +23,7 @@ PID_FILE = BASE_DIR / "app.pid"
 PROFILE_DIR = BASE_DIR / "chrome-profile"
 SHOTS_DIR = BASE_DIR / "shots"
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 BG = "#08080b"
 CARD = "#101015"
@@ -342,16 +342,17 @@ def monitor_chrome_pids():
     return pids
 
 
-def show_monitor_browser():
-    """Показывает окно Chrome мониторинга как обычное окно с кнопкой в панели задач."""
+def find_monitor_window():
+    """Ищет главное окно Chrome, запущенного с профилем мониторинга."""
     try:
         import ctypes
         from ctypes import wintypes
 
         user32 = ctypes.windll.user32
         pids = monitor_chrome_pids()
+        if not pids:
+            return None
         found = []
-
         WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
         def callback(hwnd, _lparam):
@@ -367,14 +368,37 @@ def show_monitor_browser():
             return True
 
         user32.EnumWindows(WNDENUMPROC(callback), 0)
+        if not found:
+            return None
 
-        if found:
-            def area(hwnd):
-                rect = wintypes.RECT()
-                user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                return (rect.right - rect.left) * (rect.bottom - rect.top)
+        def area(hwnd):
+            rect = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            return (rect.right - rect.left) * (rect.bottom - rect.top)
 
-            hwnd = max(found, key=area)
+        return max(found, key=area)
+    except Exception:
+        return None
+
+
+def wait_monitor_window(timeout=4.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        hwnd = find_monitor_window()
+        if hwnd:
+            return hwnd
+        time.sleep(0.25)
+    return find_monitor_window()
+
+
+def show_monitor_browser():
+    """Показывает окно Chrome мониторинга как обычное окно с кнопкой в панели задач."""
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        hwnd = wait_monitor_window(0.4)
+        if hwnd:
             GWL_EXSTYLE = -20
             WS_EX_TOOLWINDOW = 0x00000080
             WS_EX_APPWINDOW = 0x00040000
@@ -400,14 +424,36 @@ def show_monitor_browser():
     if exe:
         try:
             subprocess.Popen(
-                [exe, f"--user-data-dir={PROFILE_DIR}", "--new-window",
-                 "https://www.avito.ru/"],
+                [exe, f"--user-data-dir={PROFILE_DIR}",
+                 "--window-position=120,80", "--window-size=1280,900",
+                 "--new-window", "https://www.avito.ru/"],
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             return True
         except Exception:
             return False
     return False
+
+
+def hide_monitor_browser():
+    """Убирает окно Chrome мониторинга за край экрана и из панели задач."""
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        hwnd = wait_monitor_window(2.0)
+        if not hwnd:
+            return False
+        GWL_EXSTYLE = -20
+        WS_EX_TOOLWINDOW = 0x00000080
+        WS_EX_APPWINDOW = 0x00040000
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        style = (style & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+        user32.SetWindowPos(hwnd, 0, -3200, -3200, 1280, 900, 0x0040)
+        return True
+    except Exception:
+        return False
 
 
 def dark_titlebar(window):
@@ -1002,8 +1048,12 @@ class App(tk.Tk):
         Btn(row, "изменения", self.open_changes, width=150, height=36,
             bg=CARD, variant="ghost", font=F_SMALL).pack(side="right")
 
-        Btn(body, "показать Chrome", self.show_browser, width=320, height=36,
-            bg=CARD, variant="ghost", font=F_SMALL).pack(fill="x", pady=(10, 0))
+        browser_row = tk.Frame(body, bg=CARD)
+        browser_row.pack(fill="x", pady=(10, 0))
+        Btn(browser_row, "показать Chrome", self.show_browser, width=150, height=36,
+            bg=CARD, variant="ghost", font=F_SMALL).pack(side="left")
+        Btn(browser_row, "скрыть Chrome", self.hide_browser, width=150, height=36,
+            bg=CARD, variant="ghost", font=F_SMALL).pack(side="right")
 
         tk.Frame(body, bg=LINE_SOFT, height=1).pack(side="bottom", fill="x",
                                                     pady=(0, 12))
@@ -1226,6 +1276,14 @@ class App(tk.Tk):
         messagebox.showinfo(
             "Avito Watch",
             "Не нашёл Chrome. Установи Google Chrome или запусти мониторинг.",
+        )
+
+    def hide_browser(self):
+        if hide_monitor_browser():
+            return
+        messagebox.showinfo(
+            "Avito Watch",
+            "Окно Chrome не найдено — возможно, мониторинг не запущен.",
         )
 
     def _paint_dot(self):

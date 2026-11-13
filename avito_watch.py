@@ -37,7 +37,7 @@ SHOTS_DIR = BASE_DIR / "shots"
 PROFILE_DIR = BASE_DIR / "chrome-profile"
 CONFIG_FILE = BASE_DIR / "config.json"
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 URL = (
     "https://www.avito.ru/all/tovary_dlya_kompyutera/komplektuyuschie/"

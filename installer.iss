@@ -1,5 +1,5 @@
 ﻿#define AppName "Avito Watch"
-#define AppVersion "1.0.0"
+#define AppVersion "1.0.1"
 #define AppPublisher "tatar4173"
 
 [Setup]
