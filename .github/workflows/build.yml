@@ -1,4 +1,4 @@
-name: build-installer
+﻿name: build-installer
 
 on:
   push:
@@ -58,10 +58,3 @@ jobs:
             dist/*.exe
             dist/SHA256.txt
 
-      - name: Публикация релиза
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/*.exe
-            dist/SHA256.txt
